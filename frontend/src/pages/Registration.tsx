@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { API_URL } from '../constants'
 import { useNavigate } from 'react-router-dom'
 import Loader from '../components/Loader'
@@ -7,18 +6,17 @@ import {
   registerSchema,
   type RegisterFormData,
 } from '../schemas/registerSchema'
+import { useForm } from '../hooks/useForm'
 
 function Registration() {
-  const [formData, setFormData] = useState<RegisterFormData>({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  })
-
-  const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const { formData, loading, setLoading, errors, setErrors, handleChange } =
+    useForm<RegisterFormData>({
+      firstName: '',
+      lastName: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+    })
 
   const navigate = useNavigate()
 
@@ -72,10 +70,6 @@ function Registration() {
     }
   }
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-  }
-
   const passwordDoNotMatch =
     formData.confirmPassword.length > 0 &&
     formData.confirmPassword !== formData.password
@@ -101,7 +95,11 @@ function Registration() {
                   {errors.general}
                 </div>
               )}
-              <form onSubmit={registerUser} aria-labelledby='register-heading'>
+              <form
+                onSubmit={registerUser}
+                noValidate
+                aria-labelledby='register-heading'
+              >
                 <div className='mb-3'>
                   <label htmlFor='firstName' className='form-label'>
                     First name

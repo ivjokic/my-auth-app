@@ -1,18 +1,16 @@
-import { useState } from 'react'
 import { API_URL } from '../constants'
 import { useNavigate, Link } from 'react-router-dom'
 import Loader from '../components/Loader'
 import { z } from 'zod'
 import { loginSchema, type LoginFormData } from '../schemas/loginSchema'
+import { useForm } from '../hooks/useForm'
 
 function Login() {
-  const [formData, setFormData] = useState<LoginFormData>({
-    email: '',
-    password: '',
-  })
-
-  const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const { formData, errors, setErrors, loading, setLoading, handleChange } =
+    useForm<LoginFormData>({
+      email: '',
+      password: '',
+    })
 
   const navigate = useNavigate()
 
@@ -58,10 +56,6 @@ function Login() {
     }
   }
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-  }
-
   if (loading) {
     return <Loader />
   }
@@ -80,7 +74,7 @@ function Login() {
                   {errors.general}
                 </div>
               )}
-              <form onSubmit={login} aria-labelledby='login-heading'>
+              <form onSubmit={login} noValidate aria-labelledby='login-heading'>
                 <div className='mb-3'>
                   <label htmlFor='email' className='form-label'>
                     Email
@@ -130,7 +124,7 @@ function Login() {
                   Login
                 </button>
                 <p className='text-center mt-3 mb-0'>
-                  Don't have an account? <Link to='/register'>Register</Link>
+                  Don't have an account? <Link to='/'>Register</Link>
                 </p>
               </form>
             </div>

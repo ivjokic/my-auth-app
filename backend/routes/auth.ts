@@ -6,7 +6,7 @@ import { registerSchema, loginSchema } from '../schemas/auth'
 import { z } from 'zod'
 
 const router = express.Router()
-interface JwtPayload {
+type JwtPayload = {
   id: string
 }
 

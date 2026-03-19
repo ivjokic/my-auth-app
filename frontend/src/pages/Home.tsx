@@ -51,7 +51,7 @@ function Home() {
   function logout() {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    navigate('/')
+    navigate('/login')
   }
 
   if (loading) {
