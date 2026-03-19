@@ -10,7 +10,6 @@ type User = {
 
 function Home() {
   const [user, setUser] = useState<User>({ firstName: '', lastName: '' })
-  const [errors, setErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   const navigate = useNavigate()
@@ -33,14 +32,13 @@ function Home() {
       const result = await response.json()
 
       if (!response.ok) {
-        setErrors(result.errors || [result.message])
         navigate('/')
         return
       }
 
       setUser(result.user)
     } catch {
-      setErrors(['Could not reach the server'])
+      navigate('/')
     } finally {
       setLoading(false)
     }

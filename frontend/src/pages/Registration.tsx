@@ -1,62 +1,87 @@
-import React, { useState } from 'react';
-import { API_URL } from '../constants';
-import { useNavigate } from 'react-router-dom';
-import Loader from '../components/Loader';
+import { useState } from 'react'
+import { API_URL } from '../constants'
+import { useNavigate } from 'react-router-dom'
+import Loader from '../components/Loader'
+import { z } from 'zod'
+import {
+  registerSchema,
+  type RegisterFormData,
+} from '../schemas/registerSchema'
 
-type formDataType = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-};
 function Registration() {
-  const [formData, setFormData] = useState<formDataType>({
+  const [formData, setFormData] = useState<RegisterFormData>({
     firstName: '',
     lastName: '',
     email: '',
     password: '',
-  });
+    confirmPassword: '',
+  })
 
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   async function registerUser(e: React.SyntheticEvent) {
-    e.preventDefault();
-    setErrors({});
-    setLoading(true);
+    e.preventDefault()
+
+    setErrors({})
+
+    const parsed = registerSchema.safeParse(formData)
+
+    if (!parsed.success) {
+      const fieldErrors = z.flattenError(parsed.error).fieldErrors
+
+      setErrors({
+        firstName: fieldErrors.firstName?.[0] || '',
+        lastName: fieldErrors.lastName?.[0] || '',
+        email: fieldErrors.email?.[0] || '',
+        password: fieldErrors.password?.[0] || '',
+        confirmPassword: fieldErrors.confirmPassword?.[0] || '',
+      })
+
+      return
+    }
+
+    setLoading(true)
     try {
       const response = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
-      });
-
-      const result = await response.json();
+        body: JSON.stringify({
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+          email: parsed.data.email,
+          password: parsed.data.password,
+        }),
+      })
+      const result = await response.json()
       if (!response.ok) {
-        setErrors(result.errors || { general: result.message });
-        return;
-      } else {
-        localStorage.setItem('user', JSON.stringify(result.user));
-        localStorage.setItem('token', result.token);
-        navigate('/home');
+        setErrors(result.errors || { general: result.message })
+        return
       }
+      localStorage.setItem('user', JSON.stringify(result.user))
+      localStorage.setItem('token', result.token)
+      navigate('/home')
     } catch {
-      setErrors({ general: 'Could not reach the server.' });
+      setErrors({ general: 'Could not reach the server.' })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
+  const passwordDoNotMatch =
+    formData.confirmPassword.length > 0 &&
+    formData.confirmPassword !== formData.password
+
   if (loading) {
-    return <Loader />;
+    return <Loader />
   }
 
   return (
@@ -157,12 +182,39 @@ function Registration() {
                     <div className='invalid-feedback'>{errors.password}</div>
                   )}
                 </div>
+                <div className='mb-3'>
+                  <label htmlFor='confirmPassword' className='form-label'>
+                    Confirm Password
+                  </label>
+                  <input
+                    id='confirmPassword'
+                    type='password'
+                    className={`form-control ${errors.confirmPassword || passwordDoNotMatch ? 'is-invalid' : ''}`}
+                    placeholder='Repeat your password'
+                    name='confirmPassword'
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    autoComplete='new-password'
+                    required
+                    aria-required='true'
+                  />
+                  {errors.confirmPassword && (
+                    <div className='invalid-feedback'>
+                      {errors.confirmPassword}
+                    </div>
+                  )}
+                  {!errors.confirmPassword && passwordDoNotMatch && (
+                    <div className='invalid-feedback'>
+                      {'Passwords do not match'}
+                    </div>
+                  )}
+                </div>
                 <button
                   type='submit'
                   className='btn btn-primary w-100 mt-2'
                   disabled={loading}
                 >
-                  {loading ? 'Registering..' : 'Register'}
+                  {loading ? 'Registering...' : 'Register'}
                 </button>
               </form>
             </div>
@@ -170,7 +222,7 @@ function Registration() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
-export default Registration;
+export default Registration

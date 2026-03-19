@@ -2,78 +2,58 @@ import express, { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/User'
+import { registerSchema } from '../schemas/auth'
+import { z } from 'zod'
 
 const router = express.Router()
 
-function isValidEmail(value: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(value)
-}
-
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, email, password } = req.body
+    const parsed = registerSchema.safeParse(req.body)
 
-    const errors: Record<string, string> = {}
+    if (!parsed.success) {
+      const fieldErrors = z.flattenError(parsed.error).fieldErrors
 
-    if (
-      !firstName ||
-      typeof firstName !== 'string' ||
-      firstName.trim() === ''
-    ) {
-      errors.firstName = 'First name is required.'
-    }
-    if (!lastName || typeof lastName !== 'string' || lastName.trim() === '') {
-      errors.lastName = 'Last name is required.'
-    }
-    if (!email || typeof email !== 'string' || email.trim() === '') {
-      errors.email = 'Email is required.'
-    } else if (!isValidEmail(email.trim())) {
-      errors.email = 'Email must be a valid email address.'
-    }
-    if (!password || typeof password !== 'string') {
-      errors.password = 'Password is required.'
-    } else if (password.length < 6) {
-      errors.password = 'Password must be at least 6 characters long.'
-    }
-
-    if (Object.keys(errors).length > 0) {
       return res.status(400).json({
         message: 'Validation failed.',
-        errors,
+        errors: {
+          firstName: fieldErrors.firstName?.[0],
+          lastName: fieldErrors.lastName?.[0],
+          email: fieldErrors.email?.[0],
+          password: fieldErrors.password?.[0],
+        },
       })
     }
 
-    const trimmedFirstName = firstName.trim()
-    const trimmedLastName = lastName.trim()
-    const trimmedEmail = email.trim()
+    const { firstName, lastName, email, password } = parsed.data
 
-    const userExists = await User.findOne({ email: trimmedEmail })
+    const userExists = await User.findOne({ email })
     if (userExists) {
       return res
         .status(400)
-        .json({ message: 'Korisnik sa ovim email-om već postoji.' })
+        .json({ message: 'A user with this email already exists.' })
     }
 
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(password, salt)
 
     const newUser = new User({
-      firstName: trimmedFirstName,
-      lastName: trimmedLastName,
-      email: trimmedEmail,
+      firstName,
+      lastName,
+      email,
       password: hashedPassword,
     })
 
+    const JWT_SECRET = process.env.JWT_SECRET
+
+    if (!JWT_SECRET) {
+      throw new Error('JWT_SECRET is not defined')
+    }
     await newUser.save()
 
-    const token = jwt.sign(
-      { id: newUser._id },
-      process.env.JWT_SECRET || 'tajna_rec',
-      { expiresIn: '1h' }
-    )
+    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '1h' })
 
-    res.status(201).json({
+    return res.status(201).json({
       token,
       user: {
         id: newUser._id,
@@ -83,34 +63,55 @@ router.post('/register', async (req: Request, res: Response) => {
       },
     })
   } catch (error) {
-    console.error(error)
-    res.status(500).json({ message: 'Greška na serveru.' })
+    console.error('Register route error:', error)
+    return res.status(500).json({ message: 'Server error.' })
   }
 })
 
 router.get('/me', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'No token provided.' })
     }
 
     const token = authHeader.split(' ')[1]
-    const secret = process.env.JWT_SECRET || 'tajna_rec'
 
-    let decoded: { id: string }
+    if (!token) {
+      return res.status(401).json({ message: 'Invalid token.' })
+    }
+
+    const JWT_SECRET = process.env.JWT_SECRET
+
+    if (!JWT_SECRET) {
+      throw new Error('JWT_SECRET is not defined')
+    }
+
+    let verified: ReturnType<typeof jwt.verify>
+
     try {
-      decoded = jwt.verify(token, secret) as { id: string }
+      verified = jwt.verify(token, JWT_SECRET)
     } catch {
       return res.status(401).json({ message: 'Invalid or expired token.' })
     }
 
-    const user = await User.findById(decoded.id).select('-password')
+    if (
+      typeof verified !== 'object' ||
+      verified === null ||
+      !('id' in verified) ||
+      typeof verified.id !== 'string'
+    ) {
+      return res.status(401).json({ message: 'Invalid token payload.' })
+    }
+
+    const user = await User.findById(verified.id).select('-password')
+
     if (!user) {
       return res.status(401).json({ message: 'User not found.' })
     }
 
-    res.json({
+    return res.json({
       user: {
         id: user._id,
         firstName: user.firstName,
@@ -119,9 +120,8 @@ router.get('/me', async (req: Request, res: Response) => {
       },
     })
   } catch (error) {
-    console.error(error)
-    res.status(500).json({ message: 'Greška na serveru.' })
+    console.error('Get current user error:', error)
+    return res.status(500).json({ message: 'Server error.' })
   }
 })
-
 export default router
