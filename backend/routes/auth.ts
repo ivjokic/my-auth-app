@@ -2,10 +2,63 @@ import express, { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/User'
-import { registerSchema } from '../schemas/auth'
+import { registerSchema, loginSchema } from '../schemas/auth'
 import { z } from 'zod'
 
 const router = express.Router()
+interface JwtPayload {
+  id: string
+}
+
+router.post('/login', async (req: Request, res: Response) => {
+  try {
+    const parsed = loginSchema.safeParse(req.body)
+
+    if (!parsed.success) {
+      const fieldErrors = z.flattenError(parsed.error).fieldErrors
+
+      return res.status(400).json({
+        message: 'Validation failed.',
+        errors: {
+          email: fieldErrors.email?.[0],
+          password: fieldErrors.password?.[0],
+        },
+      })
+    }
+
+    const { email, password } = parsed.data
+
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password.' })
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password)
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid email or password.' })
+    }
+
+    const JWT_SECRET = process.env.JWT_SECRET
+    if (!JWT_SECRET) {
+      throw new Error('JWT_SECRET is not defined')
+    }
+
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1h' })
+
+    return res.status(200).json({
+      token,
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+      },
+    })
+  } catch (error) {
+    console.error('Login route error:', error)
+    return res.status(500).json({ message: 'Server error.' })
+  }
+})
 
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -88,21 +141,12 @@ router.get('/me', async (req: Request, res: Response) => {
       throw new Error('JWT_SECRET is not defined')
     }
 
-    let verified: ReturnType<typeof jwt.verify>
+    let verified: JwtPayload
 
     try {
-      verified = jwt.verify(token, JWT_SECRET)
+      verified = jwt.verify(token, JWT_SECRET) as JwtPayload
     } catch {
       return res.status(401).json({ message: 'Invalid or expired token.' })
-    }
-
-    if (
-      typeof verified !== 'object' ||
-      verified === null ||
-      !('id' in verified) ||
-      typeof verified.id !== 'string'
-    ) {
-      return res.status(401).json({ message: 'Invalid token payload.' })
     }
 
     const user = await User.findById(verified.id).select('-password')
